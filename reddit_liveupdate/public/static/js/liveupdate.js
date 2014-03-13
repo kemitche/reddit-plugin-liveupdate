@@ -12,8 +12,10 @@ r.liveupdate = {
             .scroll($.proxy(this, '_loadMoreIfNearBottom'))
             .scroll()  // in case of a short page / tall window
 
+        var $notificationsCheckbox = $('#desktop-notifications')
         if (r.config.liveupdate_websocket) {
             this._websocket = new r.WebSocket(r.config.liveupdate_websocket)
+
             this._websocket.on({
                 'connecting': this._onWebSocketConnecting,
                 'connected': this._onWebSocketConnected,
@@ -26,7 +28,13 @@ r.liveupdate = {
                 'message:settings': this._onSettingsChanged,
                 'message:update': this._onNewUpdate
             }, this)
+
+            new r.liveupdate.Notifier($notificationsCheckbox, this._websocket)
+
             this._websocket.start()
+        } else {
+            $notificationsCheckbox.prop('disabled', true)
+                                  .prop('checked', false)
         }
 
         Tinycon.setOptions({
@@ -224,6 +232,99 @@ r.liveupdate = {
     }
 }
 
+r.liveupdate.Notifier = function ($el, socket) {
+    this.$el = $el
+    this._activeNotifications = []
+    this._icon = r.utils.staticURL('liveupdate-notification-icon.png')
+
+    if ("Notification" in window) {
+        $(document).on({
+            'show': $.proxy(this, '_onPageVisible'),
+            'hide': $.proxy(this, '_onPageHide')
+        })
+
+        socket.on({
+            'message:update': this._onNewUpdate
+        }, this)
+
+        if (Notification.permission == 'granted') {
+            if (store.safeGet('live.desktop-notifications')) {
+                this.$el.prop('checked', true)
+            }
+        }
+
+        $el.change($.proxy(this._notificationSettingChanged, this))
+    } else {
+        this._onPermissionChanged('denied')
+    }
+}
+_.extend(r.liveupdate.Notifier.prototype, {
+    _onPageVisible: function () {
+        this._pageVisible = true
+        this._clearNotifications()
+    },
+
+    _onPageHide: function () {
+        this._pageVisible = false
+    },
+
+    _notificationSettingChanged: function () {
+        var notificationsDesired = this.$el.prop('checked')
+        store.safeSet('live.desktop-notifications', notificationsDesired)
+
+        if (notificationsDesired && Notification.permission != 'granted') {
+            this._requestPermission()
+        }
+    },
+
+    _requestPermission: function () {
+        this.$el.prop('disabled', true)
+        Notification.requestPermission(_.bind(this._onPermissionChanged, this))
+    },
+
+    _onPermissionChanged: function (permission) {
+        if (permission == 'granted') {
+            this.$el.prop('disabled', false)
+            this._notificationSettingChanged()
+        } else if (permission == 'denied') {
+            this.$el.prop('checked', false)
+                     prop('disabled', true)
+        }
+    },
+
+    _onNewUpdate: function (thing) {
+        if (!this._pageVisible && this.$el.prop('checked')) {
+            var title = $('#liveupdate-title').text()
+            var notification = new Notification(title, {
+                body: r.liveupdate.utils.ellipsize(thing.body, 160),
+                icon: this._icon,
+            })
+            this._activeNotifications.push(notification)
+
+            notification.onclick = _.bind(function (ev) {
+                this._clearNotifications()
+                window.focus()
+                ev.preventDefault()
+            }, this)
+
+            notification.onclose = _.bind(function (ev) {
+                var index = this._activeNotifications.indexOf(ev.target)
+                this._activeNotifications.splice(index, 1)
+            }, this)
+
+            setTimeout(function () {
+                notification.close()
+            }, 10 * 1000)
+        }
+    },
+
+    _clearNotifications: function () {
+        _.each(this._activeNotifications, function (notification) {
+            notification.close()
+        })
+    }
+})
+
 r.liveupdate.Countdown = function (tickCallback, delay) {
     this._tickCallback = tickCallback
     this._deadline = Date.now() + delay
@@ -250,5 +351,14 @@ _.extend(r.liveupdate.Countdown.prototype, {
         }
     }
 })
+
+r.liveupdate.utils = {
+    ellipsize: function (text, limit) {
+        if (text.length > limit) {
+            return text.substring(0, limit) + '...'
+        }
+        return text
+    }
+}
 
 r.liveupdate.init()
