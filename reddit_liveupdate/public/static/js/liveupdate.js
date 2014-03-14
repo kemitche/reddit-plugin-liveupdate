@@ -2,7 +2,6 @@ r.liveupdate = {
     init: function () {
         this.$listing = $('.liveupdate-listing')
         this.$table = this.$listing.find('table tbody')
-        this.$statusField = this.$listing.find('tr.initial td')
 
         this.$listing.find('nav.nextprev').remove()
         $(window)
@@ -14,10 +13,6 @@ r.liveupdate = {
             this._websocket = new r.WebSocket(r.config.liveupdate_websocket)
 
             this._websocket.on({
-                'connecting': this._onWebSocketConnecting,
-                'connected': this._onWebSocketConnected,
-                'disconnected': this._onWebSocketDisconnected,
-                'reconnecting': this._onWebSocketReconnecting,
                 'message:delete': this._onDelete,
                 'message:strike': this._onStrike,
                 'message:activity': this._onActivityUpdated,
@@ -29,6 +24,9 @@ r.liveupdate = {
             new r.liveupdate.Notifier($notificationsCheckbox, this._websocket)
             new r.liveupdate.UnreadItemCounter(this._websocket)
 
+            var $statusField = this.$listing.find('tr.initial td')
+            new r.liveupdate.SocketStatus($statusField, this._websocket)
+
             this._websocket.start()
         } else {
             $notificationsCheckbox.prop('disabled', true)
@@ -36,37 +34,6 @@ r.liveupdate = {
         }
 
         new r.liveupdate.ActivityTracker()
-    },
-
-    _onWebSocketConnecting: function () {
-        this.$statusField.addClass('connecting')
-                         .text(r._('connecting to update server...'))
-
-        if (this._reconnectCountdown) {
-            this._reconnectCountdown.cancel()
-        }
-    },
-
-    _onWebSocketConnected: function () {
-        this.$statusField.removeClass('connecting')
-                         .text(r._('updating in real time...'))
-    },
-
-    _onWebSocketDisconnected: function () {
-        this.$statusField.removeClass('connecting')
-                         .addClass('error')
-                         .text(r._('could not connect to update servers. please refresh.'))
-    },
-
-    _onWebSocketReconnecting: function (delay) {
-        this.$statusField.removeClass('connecting')
-
-        this._reconnectCountdown = new r.liveupdate.Countdown(_.bind(function (secondsRemaining) {
-            var text = r.P_('lost connection to update server. retrying in %(delay)s second...',
-                            'lost connection to update server. retrying in %(delay)s seconds...',
-                            secondsRemaining).format({'delay': secondsRemaining})
-            this.$statusField.text(text)
-        }, this), delay)
     },
 
     _onRefresh: function () {
@@ -387,6 +354,48 @@ _.extend(r.liveupdate.ActivityTracker.prototype, {
         var delay = Math.floor(this._pixelInterval -
                                this._pixelInterval * Math.random() / 2)
         setTimeout($.proxy(this, '_fetchPixel'), delay)
+    }
+})
+
+r.liveupdate.SocketStatus = function ($el, socket) {
+    this.$el = $el
+    this.socket.on({
+        'connecting': this._onWebSocketConnecting,
+        'connected': this._onWebSocketConnected,
+        'disconnected': this._onWebSocketDisconnected,
+        'reconnecting': this._onWebSocketReconnecting,
+    }, this)
+}
+_.extend(r.liveupdate.SocketStatus.prototype, {
+    _onWebSocketConnecting: function () {
+        this.$el.addClass('connecting')
+                .text(r._('connecting to update server...'))
+
+        if (this._reconnectCountdown) {
+            this._reconnectCountdown.cancel()
+        }
+    },
+
+    _onWebSocketConnected: function () {
+        this.$el.removeClass('connecting')
+                .text(r._('updating in real time...'))
+    },
+
+    _onWebSocketDisconnected: function () {
+        this.$el.removeClass('connecting')
+                .addClass('error')
+                .text(r._('could not connect to update servers. please refresh.'))
+    },
+
+    _onWebSocketReconnecting: function (delay) {
+        this.$el.removeClass('connecting')
+
+        this._reconnectCountdown = new r.liveupdate.Countdown(_.bind(function (secondsRemaining) {
+            var text = r.P_('lost connection to update server. retrying in %(delay)s second...',
+                            'lost connection to update server. retrying in %(delay)s seconds...',
+                            secondsRemaining).format({'delay': secondsRemaining})
+            this.$el.text(text)
+        }, this), delay)
     }
 })
 
