@@ -1,6 +1,5 @@
 r.liveupdate = {
     _pixelInterval: 10 * 60 * 1000,
-    _favicon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAA/1BMVEUpLzY+PDpGSk5HR0dKTlNSW2VTXGVVXmdWWl5bYWZdZGtfanVfbHpgXVtianNjbXhkZWdkam1lcX1nc4BpdYJqa2xscHZucHJueYRvfoxwfIhxcG93e4B3h5h4iJh5ipt7gIB8ipl+fn6BgYGImKOJh4aKjY2Mna6NobSOn7CQo7iar8Wfnp2juM6lo6Gmuc6mu8moqaqsw9etwcmurq6vrauxyN2xyN+0s7K+u7m/1u7C2vPF3fbI4PrJ4fvJ4/7Ly8vPzMnP6P7S0tLT0c/W8P/Z19Xd9/7d+P7e3Nrw8PDz9vT69/T+EA/+MjD+pqT+srD+w8H+zsz+/v7///9fla50AAAAuElEQVR42l2P2RaBUBhGT0WZ54jIPM8h0zE7SBL97/8uYoXFvtwXe30fIn8ggn94i8XMGSkFQvmPwFXvwOe/OGyx3OJYF+OUq26LcS2LMs05Xj0bPY+QDFc6k1bOnRQ8PYLiKlXW4IlWptQ4QWlxCIZ+h7tuwFBME9RgAG5XE8zrDYBpWNEEfElY0RO7Aejvzrs+wIa1xFGmp7AuFoprmNLya4fC8aP9YT/iOeX9pS1Fg1GpbZ/74wFo2jf64C4agwAAAABJRU5ErkJggg==',
 
     init: function () {
         this.$listing = $('.liveupdate-listing')
@@ -30,17 +29,13 @@ r.liveupdate = {
             }, this)
 
             new r.liveupdate.Notifier($notificationsCheckbox, this._websocket)
+            new r.liveupdate.UnreadItemCounter(this._websocket)
 
             this._websocket.start()
         } else {
             $notificationsCheckbox.prop('disabled', true)
                                   .prop('checked', false)
         }
-
-        Tinycon.setOptions({
-            'background': '#ff4500'
-        })
-        Tinycon.setImage(this._favicon)
 
         $(document).on({
             'show': $.proxy(this, '_onPageVisible'),
@@ -58,9 +53,7 @@ r.liveupdate = {
         }
 
         this._pageVisible = true
-        this._unreadUpdates = 0
         this._needToFetchPixel = false
-        Tinycon.setBubble()
     },
 
     _onPageHide: function () {
@@ -115,11 +108,6 @@ r.liveupdate = {
         this.$listing.trigger('more-updates', [$newThing])
         $initial.after($newThing)
         r.timetext.refreshOne($newThing.find('time.live'))
-
-        if (!this._pageVisible) {
-            this._unreadUpdates += 1
-            Tinycon.setBubble(this._unreadUpdates)
-        }
     },
 
     _onDelete: function (id) {
@@ -229,6 +217,44 @@ r.liveupdate = {
         setTimeout($.proxy(this, '_fetchPixel'), delay)
     }
 }
+
+r.liveupdate.UnreadItemCounter = function (socket) {
+    Tinycon.setOptions({
+        'background': '#ff4500'
+    })
+    Tinycon.setImage(this._favicon)
+
+    $(document).on({
+        'show': $.proxy(this, '_onPageVisible'),
+        'hide': $.proxy(this, '_onPageHide')
+    })
+
+    socket.on({
+        'message:update': this._onNewItem
+    }, this)
+
+    this._onPageVisible()
+}
+_.extend(r.liveupdate.UnreadItemCounter.prototype, {
+    _favicon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAA/1BMVEUpLzY+PDpGSk5HR0dKTlNSW2VTXGVVXmdWWl5bYWZdZGtfanVfbHpgXVtianNjbXhkZWdkam1lcX1nc4BpdYJqa2xscHZucHJueYRvfoxwfIhxcG93e4B3h5h4iJh5ipt7gIB8ipl+fn6BgYGImKOJh4aKjY2Mna6NobSOn7CQo7iar8Wfnp2juM6lo6Gmuc6mu8moqaqsw9etwcmurq6vrauxyN2xyN+0s7K+u7m/1u7C2vPF3fbI4PrJ4fvJ4/7Ly8vPzMnP6P7S0tLT0c/W8P/Z19Xd9/7d+P7e3Nrw8PDz9vT69/T+EA/+MjD+pqT+srD+w8H+zsz+/v7///9fla50AAAAuElEQVR42l2P2RaBUBhGT0WZ54jIPM8h0zE7SBL97/8uYoXFvtwXe30fIn8ggn94i8XMGSkFQvmPwFXvwOe/OGyx3OJYF+OUq26LcS2LMs05Xj0bPY+QDFc6k1bOnRQ8PYLiKlXW4IlWptQ4QWlxCIZ+h7tuwFBME9RgAG5XE8zrDYBpWNEEfElY0RO7Aejvzrs+wIa1xFGmp7AuFoprmNLya4fC8aP9YT/iOeX9pS1Fg1GpbZ/74wFo2jf64C4agwAAAABJRU5ErkJggg==',
+
+    _onPageVisible: function () {
+        this._pageVisible = true
+        this._unreadUpdates = 0
+        Tinycon.setBubble()
+    },
+
+    _onPageHide: function () {
+        this._pageVisible = false
+    },
+
+    _onNewItem: function () {
+        if (!this._pageVisible) {
+            this._unreadUpdates += 1
+            Tinycon.setBubble(this._unreadUpdates)
+        }
+    }
+})
 
 r.liveupdate.Notifier = function ($el, socket) {
     this.$el = $el
