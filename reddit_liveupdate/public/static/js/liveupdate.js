@@ -1,6 +1,4 @@
 r.liveupdate = {
-    _pixelInterval: 10 * 60 * 1000,
-
     init: function () {
         this.$listing = $('.liveupdate-listing')
         this.$table = this.$listing.find('table tbody')
@@ -37,27 +35,7 @@ r.liveupdate = {
                                   .prop('checked', false)
         }
 
-        $(document).on({
-            'show': $.proxy(this, '_onPageVisible'),
-            'hide': $.proxy(this, '_onPageHide')
-        })
-        this._onPageVisible()
-
-        this._pixelsFetched = 0
-        this._fetchPixel()
-    },
-
-    _onPageVisible: function () {
-        if (this._needToFetchPixel) {
-            this._fetchPixel()
-        }
-
-        this._pageVisible = true
-        this._needToFetchPixel = false
-    },
-
-    _onPageHide: function () {
-        this._pageVisible = false
+        new r.liveupdate.ActivityTracker()
     },
 
     _onWebSocketConnecting: function () {
@@ -190,31 +168,6 @@ r.liveupdate = {
             .always($.proxy(function () {
                 this.$listing.removeClass('loading')
             }, this))
-    },
-
-    _fetchPixel: function () {
-        if (!this._pageVisible) {
-            this._needToFetchPixel = true
-            return
-        }
-
-        var pixel = new Image()
-        pixel.src = '//' + r.config.liveupdate_pixel_domain +
-                    '/live/' + r.config.liveupdate_event + '/pixel.png' +
-                    '?rand=' + Math.random()
-
-        // we don't need to fire a heartbeat for GA on the first pixel request, also
-        // google analytics might not be enabled, so only use this if we're sure it's safe
-        if (this._pixelsFetched > 0 && window._gaq) {
-            // TODO: do something when we hit the 500 ping limit
-            _gaq.push(['_trackEvent', 'Heartbeat', 'Heartbeat', '', 0, true]);
-        }
-
-        this._pixelsFetched += 1
-
-        var delay = Math.floor(this._pixelInterval -
-                               this._pixelInterval * Math.random() / 2)
-        setTimeout($.proxy(this, '_fetchPixel'), delay)
     }
 }
 
@@ -384,5 +337,57 @@ r.liveupdate.utils = {
         return text
     }
 }
+
+r.liveupdate.ActivityTracker = function () {
+    this._pixelsFetched = 0
+    this._needToFetchPixel = true
+    this._onPageVisible()
+
+    $(document).on({
+        'show': $.proxy(this, '_onPageVisible'),
+        'hide': $.proxy(this, '_onPageHide')
+    })
+}
+_.extend(r.liveupdate.ActivityTracker.prototype, {
+    _pixelInterval: 10 * 60 * 1000,
+
+    _onPageVisible: function () {
+        this._pageVisible = true
+
+        if (this._needToFetchPixel) {
+            this._fetchPixel()
+            this._needToFetchPixel = false
+        }
+    },
+
+    _onPageHide: function () {
+        this._pageVisible = false
+    },
+
+    _fetchPixel: function () {
+        if (!this._pageVisible) {
+            this._needToFetchPixel = true
+            return
+        }
+
+        var pixel = new Image()
+        pixel.src = '//' + r.config.liveupdate_pixel_domain +
+                    '/live/' + r.config.liveupdate_event + '/pixel.png' +
+                    '?rand=' + Math.random()
+
+        // we don't need to fire a heartbeat for GA on the first pixel request, also
+        // google analytics might not be enabled, so only use this if we're sure it's safe
+        if (this._pixelsFetched > 0 && window._gaq) {
+            // TODO: do something when we hit the 500 ping limit
+            _gaq.push(['_trackEvent', 'Heartbeat', 'Heartbeat', '', 0, true]);
+        }
+
+        this._pixelsFetched += 1
+
+        var delay = Math.floor(this._pixelInterval -
+                               this._pixelInterval * Math.random() / 2)
+        setTimeout($.proxy(this, '_fetchPixel'), delay)
+    }
+})
 
 r.liveupdate.init()
